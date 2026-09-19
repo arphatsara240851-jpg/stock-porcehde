@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ตรวจนับสต็อกสินค้า (Realtime) - หจก.สิรณัฐการค้า</title>
+  <!-- Bootstrap 5 & Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      font-family: 'Sarabun', sans-serif;
+      background-color: #f8fafc;
+      color: #1e293b;
+    }
+    h1, h2, h3, h4, h5, h6, .brand-font {
+      font-family: 'Prompt', sans-serif;
+    }
+    .modern-card {
+      background: #ffffff;
+      border-radius: 14px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    }
+    .badge-soft-primary {
+      background-color: #eff6ff;
+      color: #2563eb;
+      border: 1px solid #bfdbfe;
+    }
+    .badge-soft-success {
+      background-color: #ecfdf5;
+      color: #059669;
+      border: 1px solid #a7f3d0;
+    }
+    .live-dot {
+      width: 9px;
+      height: 9px;
+      background-color: #10b981;
+      border-radius: 50%;
+      display: inline-block;
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { transform: scale(1.1); box-shadow: 0 0 0 7px rgba(16, 185, 129, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark py-2.5 shadow-sm" style="background: #0f172a !important;">
+    <div class="container">
+      <a class="navbar-brand d-flex align-items-center gap-2 text-white" href="#">
+        <div class="rounded-3 bg-primary text-white d-flex align-items-center justify-content-center" style="width:34px; height:34px;">
+          <i class="bi bi-boxes fs-5"></i>
+        </div>
+        <div>
+          <div class="fw-bold fs-6 brand-font lh-1">Intelligent Stock</div>
+          <small class="text-white-50" style="font-size: 0.75rem;">หจก.สิรณัฐการค้า · ระบบตรวจนับสต็อกสินค้า Realtime</small>
+        </div>
+      </a>
+      <div class="d-flex align-items-center gap-3 ms-auto">
+        <span class="badge bg-slate-800 text-emerald-400 border border-emerald-500/30 d-flex align-items-center gap-1.5 py-1.5 px-2.5 rounded-pill small">
+          <span class="live-dot"></span>
+          <span id="syncStatus">Realtime Connected</span>
+        </span>
+        <div class="d-flex align-items-center gap-2">
+          <span class="text-white-50 small d-none d-md-inline">พนักงาน:</span>
+          <span id="userNameDisplay" class="fw-bold text-white small">กำลังโหลด...</span>
+          <button id="btnLogout" class="btn btn-outline-light btn-sm rounded-pill px-3 ms-1" style="font-size:0.8rem;">
+            <i class="bi bi-box-arrow-right me-1"></i>ออกจากระบบ
+          </button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container py-4 pb-5">
+    <!-- Header & Staff Card -->
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+      <div>
+        <h4 class="fw-bold text-slate-900 mb-0">ระบบตรวจนับสต็อกสินค้าประจำวัน</h4>
+        <div class="text-secondary small mt-1 d-flex align-items-center gap-2">
+          <span>ผู้ตรวจนับ: <strong id="userFullName" class="text-dark">-</strong></span>
+          <span id="userNicknameBadge" class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill"></span>
+          <span class="text-muted">| บันทึก Session อัตโนมัติ เข้าใหม่ไม่ต้องล็อกอินซ้ำ</span>
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <a href="dashboard.html" class="btn btn-outline-secondary btn-sm rounded-2 d-flex align-items-center gap-1.5 shadow-sm">
+          <i class="bi bi-graph-up"></i>
+          <span>ดูหน้าภาพรวมคลังสินค้า (Dashboard)</span>
+        </a>
+        <button class="btn btn-outline-primary btn-sm rounded-2 d-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#dbConfigModal">
+          <i class="bi bi-database-gear"></i>
+          <span>ตั้งค่า Supabase</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Alert Box for Live Notifications -->
+    <div id="liveAlertBox" class="d-none alert alert-success alert-dismissible fade show shadow-sm rounded-3 py-2.5 px-3" role="alert">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-check-circle-fill text-success fs-5"></i>
+        <div id="liveAlertText" class="small flex-grow-1"></div>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      <!-- Counting Form Table (Left) -->
+      <div class="col-lg-8">
+        <div class="modern-card overflow-hidden">
+          <div class="p-3 px-4 bg-white border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+              <i class="bi bi-clipboard-check text-primary fs-5"></i>
+              <h6 class="mb-0 fw-bold text-dark">รายการสินค้าที่ต้องตรวจนับ</h6>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <span id="productCountBadge" class="badge badge-soft-primary rounded-pill px-2.5 py-1 small">5 รายการ</span>
+              <div class="form-check form-switch mb-0 small ps-0">
+                <input class="form-check-input ms-0 cursor-pointer" type="checkbox" id="autoUpdateStockCheck" checked>
+                <label class="form-check-label fw-semibold text-secondary ms-1 small" for="autoUpdateStockCheck">อัปเดตสต็อกในระบบทันที</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table align-middle mb-0">
+              <thead class="table-light small text-secondary">
+                <tr>
+                  <th class="ps-3" style="width: 15%;">รหัสสินค้า</th>
+                  <th style="width: 32%;">ชื่อสินค้า / หมวดหมู่</th>
+                  <th style="width: 18%;">จำนวนที่นับได้จริง</th>
+                  <th style="width: 20%;">สาเหตุ / หมายเหตุ</th>
+                  <th class="pe-3 text-center" style="width: 15%;">ดำเนินการ</th>
+                </tr>
+              </thead>
+              <tbody id="productTableBody">
+                <tr>
+                  <td colspan="5" class="text-center py-4 text-muted">กำลังโหลดรายการสินค้า...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="p-3 bg-light border-top text-muted small d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div>
+              <i class="bi bi-lightning-charge-fill text-warning me-1"></i>
+              เมื่อกด <strong>"บันทึกและส่งผลการตรวจนับ"</strong> ระบบจะบันทึกจำนวนและสาเหตุลงฐานข้อมูล และส่งสัญญาณ Realtime ไปยังหน้าภาพรวมทันที
+            </div>
+            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill">
+              ● พร้อมเชื่อมต่อ Realtime
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Realtime Activity & Log (Right) -->
+      <div class="col-lg-4">
+        <div class="modern-card overflow-hidden">
+          <div class="p-3 px-4 bg-white border-bottom d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-2">
+              <i class="bi bi-clock-history text-secondary"></i>
+              <h6 class="mb-0 fw-bold text-dark">ประวัติการนับล่าสุด (Realtime)</h6>
+            </div>
+            <span class="badge bg-secondary-subtle text-secondary rounded-pill small" id="historyCountBadge">0 รายการ</span>
+          </div>
+          <div class="p-3" style="max-height: 480px; overflow-y: auto;" id="countHistoryContainer">
+            <div class="text-center text-muted py-4 small">ยังไม่มีรายการตรวจนับในรอบนี้</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Supabase Settings -->
+  <div class="modal fade" id="dbConfigModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content rounded-4 border-0 shadow">
+        <div class="modal-header bg-dark text-white">
+          <h6 class="modal-title fw-bold"><i class="bi bi-database me-1"></i>ตั้งค่าการเชื่อมต่อ Supabase Database</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-3">
+            นำค่า <strong>Project URL</strong> และ <strong>Anon Public Key</strong> จาก Supabase Dashboard (Settings &gt; API) มาวางเพื่อบันทึกและซิงค์ข้อมูลจริงแบบ Realtime
+          </p>
+          <div class="mb-3">
+            <label class="form-label small fw-bold">Supabase URL</label>
+            <input type="text" id="supabaseUrlInput" class="form-control form-control-sm" placeholder="https://xyz.supabase.co" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-bold">Supabase Anon Key</label>
+            <input type="password" id="supabaseKeyInput" class="form-control form-control-sm" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." />
+          </div>
+          <div class="alert alert-info py-2 small mb-0">
+            <i class="bi bi-info-circle me-1"></i> หากเว้นว่างไว้ ระบบจะใช้ LocalStorage Database & Realtime BroadcastChannel ให้ใช้งานบนเครื่องได้ทันที
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">ปิด</button>
+          <button type="button" id="btnSaveDbConfig" class="btn btn-primary btn-sm">บันทึกการตั้งค่า</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- Realtime & Stock Counting Logic -->
+  <script>
+    const DEFAULT_PRODUCTS = [
+      { id: 1, product_code: 'P-001', product_name: 'สายฉีดชำระสแตนเลส 304', category: 'หมวดอุปกรณ์ห้องน้ำ', system_qty: 45 },
+      { id: 2, product_code: 'P-002', product_name: 'ก๊อกน้ำอ่างล้างหน้าเซรามิกวาล์ว', category: 'หมวดอุปกรณ์ห้องน้ำ', system_qty: 30 },
+      { id: 3, product_code: 'P-003', product_name: 'สีสเปรย์อเนกประสงค์ สีดำเงา', category: 'หมวดเคมีภัณฑ์และสี', system_qty: 120 },
+      { id: 4, product_code: 'P-004', product_name: 'สกรูเกลียวปล่อย 1 นิ้ว', category: 'หมวดฮาร์ดแวร์และสกรู', system_qty: 200 },
+      { id: 5, product_code: 'P-005', product_name: 'แปรงทาสี ขนเคมี 2 นิ้ว', category: 'หมวดอุปกรณ์ทาสี', system_qty: 85 }
+    ];
+
+    let currentUser = null;
+    let products = [];
+    let supabase = null;
+    const realtimeChannel = new BroadcastChannel('sirinath_realtime');
+
+    const savedSupabaseUrl = localStorage.getItem('sirinath_sb_url') || '';
+    const savedSupabaseKey = localStorage.getItem('sirinath_sb_key') || '';
+    if (savedSupabaseUrl && savedSupabaseKey && window.supabase) {
+      try {
+        supabase = window.supabase.createClient(savedSupabaseUrl, savedSupabaseKey);
+        document.getElementById('syncStatus').textContent = 'Supabase Realtime Live';
+      } catch (e) {
+        console.warn('Supabase init failed', e);
+      }
+    }
+
+    function checkUserSession() {
+      const sessionRaw = localStorage.getItem('sirinath_user');
+      if (!sessionRaw) {
+        currentUser = {
+          id: 2,
+          username: 'p11',
+          fullname: 'พนักงานนับสต็อก',
+          nickname: 'พนักงาน',
+          role: 'staff'
+        };
+        localStorage.setItem('sirinath_user', JSON.stringify(currentUser));
+      } else {
+        try {
+          currentUser = JSON.parse(sessionRaw);
+        } catch {
+          currentUser = { id: 2, username: 'p11', fullname: 'พนักงาน', role: 'staff' };
+        }
+      }
+
+      document.getElementById('userNameDisplay').textContent = currentUser.nickname || currentUser.fullname || currentUser.username;
+      document.getElementById('userFullName').textContent = currentUser.fullname;
+      if (currentUser.nickname) {
+        document.getElementById('userNicknameBadge').textContent = 'ชื่อเล่น: ' + currentUser.nickname;
+      } else {
+        document.getElementById('userNicknameBadge').classList.add('d-none');
+      }
+    }
+
+    async function loadProducts() {
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.from('products').select('*').order('id', { ascending: true });
+          if (!error && data && data.length > 0) {
+            products = data;
+            renderProducts();
+            return;
+          }
+        } catch (e) {
+          console.warn('Supabase fetch failed, fallback to local', e);
+        }
+      }
+
+      const saved = localStorage.getItem('sirinath_products');
+      products = saved ? JSON.parse(saved) : DEFAULT_PRODUCTS;
+      localStorage.setItem('sirinath_products', JSON.stringify(products));
+      renderProducts();
+    }
+
+    function renderProducts() {
+      const tbody = document.getElementById('productTableBody');
+      document.getElementById('productCountBadge').textContent = products.length + ' รายการ';
+
+      tbody.innerHTML = products.map(prod => `
+        <tr id="row-prod-${prod.id}">
+          <td class="ps-3">
+            <span class="font-monospace fw-bold text-secondary bg-light border px-2 py-1 rounded small">
+              ${prod.product_code}
+            </span>
+          </td>
+          <td>
+            <div class="fw-bold text-dark">${prod.product_name}</div>
+            <span class="badge bg-light text-secondary border rounded-pill mt-0.5" style="font-size:0.75rem;">
+              ${prod.category}
+            </span>
+          </td>
+          <td>
+            <input type="number" id="qty-input-${prod.id}" class="form-control form-control-sm text-center fw-bold rounded-2"
+                   min="0" placeholder="จำนวนจริง" style="max-width: 120px;" required />
+          </td>
+          <td>
+            <input type="text" id="reason-input-${prod.id}" class="form-control form-control-sm rounded-2"
+                   placeholder="เช่น ยอดตรง, ชำรุด 2 ชิ้น" />
+          </td>
+          <td class="pe-3 text-center">
+            <button type="button" onclick="submitCount(${prod.id})" 
+                    class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1.5 px-3 py-1.5 rounded-2 fw-semibold shadow-sm text-nowrap">
+              <i class="bi bi-check-circle-fill"></i>
+              <span>บันทึกและส่งผลการตรวจนับ</span>
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function submitCount(productId) {
+      const prod = products.find(p => p.id === productId);
+      if (!prod) return;
+
+      const qtyInput = document.getElementById(`qty-input-${productId}`);
+      const reasonInput = document.getElementById(`reason-input-${productId}`);
+      const rawQty = qtyInput.value;
+
+      if (rawQty === '' || isNaN(Number(rawQty)) || Number(rawQty) < 0) {
+        alert('กรุณากรอกจำนวนที่นับได้จริงให้ถูกต้อง');
+        qtyInput.focus();
+        return;
+      }
+
+      const countedQty = parseInt(rawQty, 10);
+      const reason = (reasonInput.value || '').trim();
+      const autoUpdate = document.getElementById('autoUpdateStockCheck').checked;
+      const oldQty = prod.system_qty;
+      const diff = countedQty - oldQty;
+      const isMatched = diff === 0;
+
+      const cleanNote = reason ? reason : (isMatched ? 'ยอดตรงตามระบบ' : `ตรวจนับได้ ${countedQty} (ผลต่าง ${diff > 0 ? '+' : ''}${diff})`);
+      const nowStr = new Date().toLocaleString('th-TH');
+
+      const countRecord = {
+        id: Date.now(),
+        product_id: prod.id,
+        product_code: prod.product_code,
+        product_name: prod.product_name,
+        category: prod.category,
+        staff_id: currentUser.id,
+        staff_name: currentUser.nickname ? `${currentUser.fullname} (${currentUser.nickname})` : currentUser.fullname,
+        counted_qty: countedQty,
+        system_qty_at_count: oldQty,
+        status: isMatched ? 'matched' : (reason ? 'mismatch' : 'pending'),
+        discrepancy_note: cleanNote,
+        counted_at: nowStr
+      };
+
+      if (autoUpdate) {
+        prod.system_qty = countedQty;
+        localStorage.setItem('sirinath_products', JSON.stringify(products));
+
+        if (supabase) {
+          try {
+            await supabase.from('products').update({ system_qty: countedQty }).eq('id', prod.id);
+            await supabase.from('stock_movements').insert([{
+              product_id: prod.id,
+              type: 'adjust',
+              qty: diff,
+              note: `ตรวจนับโดย ${countRecord.staff_name}: ${cleanNote}`,
+              created_at: new Date().toISOString()
+            }]);
+          } catch (err) {
+            console.warn('Supabase product update error', err);
+          }
+        }
+      }
+
+      if (supabase) {
+        try {
+          await supabase.from('stock_counts').insert([{
+            product_id: prod.id,
+            staff_id: currentUser.id,
+            counted_qty: countedQty,
+            status: countRecord.status,
+            discrepancy_note: cleanNote,
+            counted_at: new Date().toISOString()
+          }]);
+        } catch (err) {
+          console.warn('Supabase count insert error', err);
+        }
+      }
+
+      const existingHistory = JSON.parse(localStorage.getItem('sirinath_counts') || '[]');
+      existingHistory.unshift(countRecord);
+      localStorage.setItem('sirinath_counts', JSON.stringify(existingHistory));
+
+      const realtimePayload = {
+        type: 'STOCK_COUNT_SUBMITTED',
+        count: countRecord,
+        product: prod,
+        newQty: countedQty,
+        diff: diff,
+        timestamp: Date.now()
+      };
+      realtimeChannel.postMessage(realtimePayload);
+
+      if (supabase) {
+        try {
+          const channel = supabase.channel('stock-realtime-channel');
+          channel.send({
+            type: 'broadcast',
+            event: 'STOCK_COUNT_SUBMITTED',
+            payload: realtimePayload
+          });
+        } catch (e) {}
+      }
+
+      qtyInput.value = '';
+      reasonInput.value = '';
+      showLiveAlert(`บันทึกและส่งผลการตรวจนับ "${prod.product_name}" จำนวน ${countedQty.toLocaleString()} ชิ้น สำเร็จ! (อัปเดตสต็อกเรียลไทม์แล้ว)`);
+      addHistoryCard(countRecord);
+    }
+
+    function showLiveAlert(msg) {
+      const box = document.getElementById('liveAlertBox');
+      const txt = document.getElementById('liveAlertText');
+      txt.textContent = msg;
+      box.classList.remove('d-none');
+      setTimeout(() => {
+        box.classList.add('d-none');
+      }, 5000);
+    }
+
+    function addHistoryCard(record) {
+      const container = document.getElementById('countHistoryContainer');
+      const emptyMsg = container.querySelector('.text-muted');
+      if (emptyMsg) emptyMsg.remove();
+
+      const card = document.createElement('div');
+      card.className = 'p-2.5 mb-2.5 rounded-3 border bg-white shadow-xs';
+      card.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <strong class="text-dark small">${record.product_name}</strong>
+          <span class="badge ${record.status === 'matched' ? 'bg-success' : 'bg-warning text-dark'} small">
+            ${record.status === 'matched' ? 'ยอดตรง' : 'มีผลต่าง'}
+          </span>
+        </div>
+        <div class="small text-secondary d-flex justify-content-between">
+          <span>นับได้: <strong>${record.counted_qty} ชิ้น</strong></span>
+          <span style="font-size:0.75rem;">${record.counted_at}</span>
+        </div>
+        ${record.discrepancy_note ? `<div class="text-muted small mt-1" style="font-size:0.78rem;">หมายเหตุ: ${record.discrepancy_note}</div>` : ''}
+      `;
+      container.prepend(card);
+    }
+
+    realtimeChannel.onmessage = (event) => {
+      const { data } = event;
+      if (data && data.type === 'STOCK_ADJUSTED' || data.type === 'PRODUCT_UPDATED') {
+        loadProducts();
+      }
+    };
+
+    if (supabase) {
+      supabase
+        .channel('public:products')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, payload => {
+          loadProducts();
+        })
+        .subscribe();
+    }
+
+    document.getElementById('btnLogout').addEventListener('click', () => {
+      localStorage.removeItem('sirinath_user');
+      window.location.href = 'login.html';
+    });
+
+    document.getElementById('btnSaveDbConfig').addEventListener('click', () => {
+      const url = document.getElementById('supabaseUrlInput').value.trim();
+      const key = document.getElementById('supabaseKeyInput').value.trim();
+      if (url && key) {
+        localStorage.setItem('sirinath_sb_url', url);
+        localStorage.setItem('sirinath_sb_key', key);
+        alert('บันทึกการตั้งค่า Supabase เรียบร้อยแล้ว! หน้านี้จะโหลดใหม่เพื่อเปิด Realtime');
+        window.location.reload();
+      } else {
+        localStorage.removeItem('sirinath_sb_url');
+        localStorage.removeItem('sirinath_sb_key');
+        alert('ล้างการตั้งค่า Supabase และกลับมาใช้ LocalStorage Realtime Database สำเร็จ');
+        window.location.reload();
+      }
+    });
+
+    document.getElementById('supabaseUrlInput').value = savedSupabaseUrl;
+    document.getElementById('supabaseKeyInput').value = savedSupabaseKey;
+
+    checkUserSession();
+    loadProducts();
+  </script>
+</body>
+</html>

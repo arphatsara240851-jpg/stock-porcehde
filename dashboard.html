@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ภาพรวมคลังสินค้า & สต็อกเรียลไทม์ - หจก.สิรณัฐการค้า</title>
+  <!-- Bootstrap 5 & Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      font-family: 'Sarabun', sans-serif;
+      background-color: #f8fafc;
+      color: #1e293b;
+    }
+    h1, h2, h3, h4, h5, h6, .brand-font {
+      font-family: 'Prompt', sans-serif;
+    }
+    .modern-card {
+      background: #ffffff;
+      border-radius: 14px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+    .stat-card {
+      background: #ffffff;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      padding: 18px;
+    }
+    .live-dot {
+      width: 9px;
+      height: 9px;
+      background-color: #10b981;
+      border-radius: 50%;
+      display: inline-block;
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { transform: scale(1.1); box-shadow: 0 0 0 7px rgba(16, 185, 129, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark py-2.5 shadow-sm" style="background: #0f172a !important;">
+    <div class="container">
+      <a class="navbar-brand d-flex align-items-center gap-2 text-white" href="#">
+        <div class="rounded-3 bg-primary text-white d-flex align-items-center justify-content-center" style="width:34px; height:34px;">
+          <i class="bi bi-boxes fs-5"></i>
+        </div>
+        <div>
+          <div class="fw-bold fs-6 brand-font lh-1">Intelligent Stock</div>
+          <small class="text-white-50" style="font-size: 0.75rem;">หจก.สิรณัฐการค้า · หน้าภาพรวมและจัดการสต็อกสินค้า</small>
+        </div>
+      </a>
+      <div class="d-flex align-items-center gap-3 ms-auto">
+        <span class="badge bg-slate-800 text-emerald-400 border border-emerald-500/30 d-flex align-items-center gap-1.5 py-1.5 px-2.5 rounded-pill small">
+          <span class="live-dot"></span>
+          <span id="syncStatus">Realtime Database Active</span>
+        </span>
+        <a href="stock-count.html" class="btn btn-outline-light btn-sm rounded-pill px-3" style="font-size:0.8rem;">
+          <i class="bi bi-clipboard-check me-1"></i>ไปหน้าตรวจนับสต็อก
+        </a>
+        <button id="btnLogout" class="btn btn-outline-danger btn-sm rounded-pill px-2.5" title="ออกจากระบบ">
+          <i class="bi bi-power"></i>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container py-4 pb-5">
+    <!-- Live Toast Alert Banner -->
+    <div id="realtimeLiveToast" class="d-none alert alert-primary border-primary-subtle shadow-sm mb-4 rounded-3 d-flex align-items-center gap-3 py-2.5 px-3">
+      <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center flex-shrink-0" style="width: 32px; height: 32px;">
+        <i class="bi bi-bell-fill"></i>
+      </div>
+      <div class="flex-grow-1 small">
+        <span class="badge bg-primary text-white me-1">Realtime Event</span>
+        <strong id="toastTitle">มีข้อมูลอัปเดตใหม่!</strong>
+        <span id="toastDetail" class="text-secondary ms-1"></span>
+      </div>
+    </div>
+
+    <!-- Header Section -->
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
+      <div>
+        <h4 class="fw-bold text-slate-900 mb-0">รายงานสรุปภาพรวมและตรวจนับสินค้า</h4>
+        <div class="text-secondary small mt-1">
+          ระบบจะอัปเดตตัวเลขสินค้าล่าสุดทันทีเมื่อพนักงานกด "บันทึกและส่งผลการตรวจนับ" โดยไม่ต้องรีเฟรชหน้าเว็บ
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <button onclick="refreshDataManual()" class="btn btn-white border btn-sm rounded-2 d-flex align-items-center gap-1.5 shadow-xs">
+          <i class="bi bi-arrow-clockwise"></i>
+          <span>ซิงค์ข้อมูล</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI Metric Cards -->
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="stat-card">
+          <div class="d-flex align-items-center justify-content-between">
+            <span class="text-muted small fw-medium">สินค้าในแคตตาล็อก</span>
+            <div class="rounded-3 bg-blue-50 text-blue-600 p-2"><i class="bi bi-box-seam"></i></div>
+          </div>
+          <div class="fs-4 fw-bold text-dark mt-2" id="kpiTotalProducts">0 <span class="fs-6 fw-normal text-muted">รายการ</span></div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card">
+          <div class="d-flex align-items-center justify-content-between">
+            <span class="text-muted small fw-medium">จำนวนสินค้าคงคลังรวม</span>
+            <div class="rounded-3 bg-emerald-50 text-emerald-600 p-2"><i class="bi bi-stack"></i></div>
+          </div>
+          <div class="fs-4 fw-bold text-success mt-2" id="kpiTotalQty">0 <span class="fs-6 fw-normal text-muted">ชิ้น</span></div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card">
+          <div class="d-flex align-items-center justify-content-between">
+            <span class="text-muted small fw-medium">ยอดนับตรงตามระบบ</span>
+            <div class="rounded-3 bg-purple-50 text-purple-600 p-2"><i class="bi bi-check2-all"></i></div>
+          </div>
+          <div class="fs-4 fw-bold text-purple-700 mt-2" id="kpiMatched">0 <span class="fs-6 fw-normal text-muted">ครั้ง</span></div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card">
+          <div class="d-flex align-items-center justify-content-between">
+            <span class="text-muted small fw-medium">พบผลต่าง / ต้องตรวจสอบ</span>
+            <div class="rounded-3 bg-rose-50 text-rose-600 p-2"><i class="bi bi-exclamation-triangle"></i></div>
+          </div>
+          <div class="fs-4 fw-bold text-danger mt-2" id="kpiMismatched">0 <span class="fs-6 fw-normal text-muted">รายการ</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Product Inventory Table (Realtime) -->
+    <div class="modern-card mb-4 overflow-hidden">
+      <div class="p-3 px-4 bg-white border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-table text-primary fs-5"></i>
+          <h6 class="mb-0 fw-bold text-dark">สต็อกสินค้าคงเหลือล่าสุด (อัปเดตอัตโนมัติ Realtime)</h6>
+        </div>
+        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small">
+          ● ข้อมูลตรงกันทุกอุปกรณ์
+        </span>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light small text-secondary">
+            <tr>
+              <th class="ps-4" style="width: 15%;">รหัสสินค้า</th>
+              <th style="width: 40%;">ชื่อสินค้า</th>
+              <th style="width: 25%;">หมวดหมู่</th>
+              <th class="pe-4 text-end" style="width: 20%;">จำนวนคงเหลือในระบบ</th>
+            </tr>
+          </thead>
+          <tbody id="inventoryTableBody">
+            <tr><td colspan="4" class="text-center py-4 text-muted">กำลังโหลดข้อมูล...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Stock Counts Realtime Activity Feed -->
+    <div class="modern-card overflow-hidden">
+      <div class="p-3 px-4 bg-white border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-activity text-secondary fs-5"></i>
+          <h6 class="mb-0 fw-bold text-dark">ประวัติผลการตรวจนับจากพนักงาน (Realtime Feed)</h6>
+        </div>
+        <span class="badge bg-secondary-subtle text-secondary rounded-pill small" id="feedCountBadge">0 รายการ</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light small text-secondary">
+            <tr>
+              <th class="ps-4">เวลาที่บันทึก</th>
+              <th>สินค้า</th>
+              <th>ผู้ตรวจนับ</th>
+              <th class="text-center">จำนวนที่นับได้</th>
+              <th class="text-center">สถานะ</th>
+              <th class="pe-4">สาเหตุ / หมายเหตุผลต่าง</th>
+            </tr>
+          </thead>
+          <tbody id="countFeedTableBody">
+            <tr><td colspan="6" class="text-center py-4 text-muted">ยังไม่มีประวัติการนับ</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const DEFAULT_PRODUCTS = [
+      { id: 1, product_code: 'P-001', product_name: 'สายฉีดชำระสแตนเลส 304', category: 'หมวดอุปกรณ์ห้องน้ำ', system_qty: 45 },
+      { id: 2, product_code: 'P-002', product_name: 'ก๊อกน้ำอ่างล้างหน้าเซรามิกวาล์ว', category: 'หมวดอุปกรณ์ห้องน้ำ', system_qty: 30 },
+      { id: 3, product_code: 'P-003', product_name: 'สีสเปรย์อเนกประสงค์ สีดำเงา', category: 'หมวดเคมีภัณฑ์และสี', system_qty: 120 },
+      { id: 4, product_code: 'P-004', product_name: 'สกรูเกลียวปล่อย 1 นิ้ว', category: 'หมวดฮาร์ดแวร์และสกรู', system_qty: 200 },
+      { id: 5, product_code: 'P-005', product_name: 'แปรงทาสี ขนเคมี 2 นิ้ว', category: 'หมวดอุปกรณ์ทาสี', system_qty: 85 }
+    ];
+
+    let products = [];
+    let counts = [];
+    let supabase = null;
+    const realtimeChannel = new BroadcastChannel('sirinath_realtime');
+
+    const savedUrl = localStorage.getItem('sirinath_sb_url');
+    const savedKey = localStorage.getItem('sirinath_sb_key');
+    if (savedUrl && savedKey && window.supabase) {
+      try {
+        supabase = window.supabase.createClient(savedUrl, savedKey);
+      } catch(e) {}
+    }
+
+    async function loadData() {
+      if (supabase) {
+        try {
+          const { data } = await supabase.from('products').select('*').order('id');
+          if (data && data.length) products = data;
+        } catch(e) {}
+      }
+      if (!products.length) {
+        const local = localStorage.getItem('sirinath_products');
+        products = local ? JSON.parse(local) : DEFAULT_PRODUCTS;
+      }
+
+      const localCounts = localStorage.getItem('sirinath_counts');
+      counts = localCounts ? JSON.parse(localCounts) : [];
+
+      renderAll();
+    }
+
+    function renderAll() {
+      document.getElementById('kpiTotalProducts').innerHTML = `${products.length} <span class="fs-6 fw-normal text-muted">รายการ</span>`;
+      const totalQty = products.reduce((sum, p) => sum + (Number(p.system_qty) || 0), 0);
+      document.getElementById('kpiTotalQty').innerHTML = `${totalQty.toLocaleString()} <span class="fs-6 fw-normal text-muted">ชิ้น</span>`;
+
+      const matched = counts.filter(c => c.status === 'matched').length;
+      const mismatched = counts.filter(c => c.status === 'mismatch').length;
+      document.getElementById('kpiMatched').innerHTML = `${matched} <span class="fs-6 fw-normal text-muted">ครั้ง</span>`;
+      document.getElementById('kpiMismatched').innerHTML = `${mismatched} <span class="fs-6 fw-normal text-muted">รายการ</span>`;
+
+      const invBody = document.getElementById('inventoryTableBody');
+      invBody.innerHTML = products.map(p => `
+        <tr id="inv-row-${p.id}">
+          <td class="ps-4">
+            <span class="font-monospace fw-bold text-secondary bg-light border px-2 py-0.5 rounded small">${p.product_code}</span>
+          </td>
+          <td class="fw-bold text-dark">${p.product_name}</td>
+          <td><span class="badge bg-light text-secondary border rounded-pill">${p.category}</span></td>
+          <td class="pe-4 text-end">
+            <span class="fs-5 fw-bold text-primary">${(p.system_qty || 0).toLocaleString()}</span>
+            <span class="small text-muted ms-1">ชิ้น</span>
+          </td>
+        </tr>
+      `).join('');
+
+      const feedBody = document.getElementById('countFeedTableBody');
+      document.getElementById('feedCountBadge').textContent = counts.length + ' รายการ';
+
+      if (!counts.length) {
+        feedBody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted">ยังไม่มีประวัติการนับ</td></tr>`;
+      } else {
+        feedBody.innerHTML = counts.slice(0, 15).map(c => `
+          <tr>
+            <td class="ps-4 small text-secondary">${c.counted_at}</td>
+            <td class="fw-bold text-dark small">${c.product_name}</td>
+            <td class="small text-secondary">${c.staff_name}</td>
+            <td class="text-center fw-bold text-dark">${c.counted_qty}</td>
+            <td class="text-center">
+              <span class="badge ${c.status === 'matched' ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-danger-subtle text-danger border border-danger-subtle'} rounded-pill">
+                ${c.status === 'matched' ? 'ยอดตรง' : 'มีผลต่าง'}
+              </span>
+            </td>
+            <td class="pe-4 small text-secondary">${c.discrepancy_note || '-'}</td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    realtimeChannel.onmessage = (e) => {
+      const { data } = e;
+      if (data && data.type === 'STOCK_COUNT_SUBMITTED') {
+        playNotificationTone();
+        showLiveToast(
+          `พนักงานบันทึกผลตรวจนับใหม่!`,
+          `${data.count.staff_name} ตรวจนับ ${data.product.product_name} ได้ ${data.newQty} ชิ้น (อัปเดตสต็อกเรียลไทม์)`
+        );
+
+        const prod = products.find(p => p.id === data.product.id);
+        if (prod) {
+          prod.system_qty = data.newQty;
+        }
+        counts.unshift(data.count);
+        renderAll();
+      }
+    };
+
+    if (supabase) {
+      supabase
+        .channel('public:dashboard')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+          loadData();
+        })
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'stock_counts' }, () => {
+          loadData();
+        })
+        .subscribe();
+    }
+
+    function showLiveToast(title, detail) {
+      const el = document.getElementById('realtimeLiveToast');
+      document.getElementById('toastTitle').textContent = title;
+      document.getElementById('toastDetail').textContent = detail;
+      el.classList.remove('d-none');
+      setTimeout(() => el.classList.add('d-none'), 6000);
+    }
+
+    function playNotificationTone() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.4);
+      } catch(e) {}
+    }
+
+    function refreshDataManual() {
+      loadData();
+    }
+
+    document.getElementById('btnLogout').addEventListener('click', () => {
+      localStorage.removeItem('sirinath_user');
+      window.location.href = 'login.html';
+    });
+
+    loadData();
+  </script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "name": "ระบบรายงานนับสต็อกสินค้า หจก.สิรณัฐการค้า",
+  "description": "ระบบรายงานนับสต็อกสินค้า หจก.สิรณัฐการค้า ด้วย PHP (PDO) และ Bootstrap 5 พร้อมระบบตรวจรับสต็อกและประวัติการเคลื่อนไหว",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
